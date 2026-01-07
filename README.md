@@ -3,7 +3,8 @@ UI part is html + vanilla js.
 
 ![desktop demo](./assets/desktop.png)
 
-![mobile demo](./assets/mobile-demo.mov)
+<video src="assets/mobile-demo.mov" controls width="400"></video>
+
 
 To run the desktop demo:
 
