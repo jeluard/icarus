@@ -1,0 +1,33 @@
+[package]
+name = "icarus"
+version = "0.1.0"
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "icarus_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2.9.5", features = [] }
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1.0.149"
+amaru = { git = "https://github.com/pragma-org/amaru", default-features = false }
+amaru-kernel = { git = "https://github.com/pragma-org/amaru" }
+amaru-stores = { git = "https://github.com/pragma-org/amaru" }
+amaru-tracing-json = { git = "https://github.com/pragma-org/amaru" }
+tokio = { version = "1.49.0", features = ["rt-multi-thread", "macros"] }
+tracing-subscriber = "0.3.22"
+tracing = "0.1.44"
+tauri-plugin-keep-screen-on = "0.1.2"
+tauri-plugin-store = "2.4.1"

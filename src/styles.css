@@ -1,0 +1,172 @@
+:root {
+  --ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --bg: #0f1220;
+  --fg: #e8eaf6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: system-ui, sans-serif;
+}
+
+/* Fullscreen centering */
+main {
+  position: fixed;
+  inset: 0;
+  height: calc(var(--vh, 1vh) * 100);
+  display: grid;
+  place-items: center;
+}
+
+/* Message container */
+.container {
+  text-align: center;
+  max-width: 32rem;
+  transform: translateY(-10%);
+}
+
+.box {
+  position: relative;
+}
+
+/* Splash screen */
+.splash {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  transition: opacity 600ms var(--ease);
+}
+
+.splash.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash img {
+  max-width: 60vmin;
+  max-height: 60vmin;
+}
+
+/* Messages */
+.message {
+  position: absolute;
+  inset: 0;
+  padding: 0 1rem;
+  font-size: 1.6rem;
+  line-height: 1.35;
+  text-align: center;
+  opacity: 0;
+  transform: translateY(0.75em);
+  transition:
+    opacity 350ms var(--ease),
+    transform 350ms var(--ease);
+  will-change: opacity, transform;
+}
+
+.message.active {
+  position: relative;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Explosion effect */
+.message.explode {
+  animation: explode-in 550ms var(--ease);
+}
+
+.badge {
+  position: fixed;
+  top: 16px;
+  right: 10px;
+  text-align: center;
+  color: palevioletred;
+}
+
+@keyframes explode-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.6);
+    filter: blur(6px);
+  }
+  40% {
+    opacity: 1;
+    transform: scale(1.25);
+    filter: blur(2px);
+    text-shadow:
+      0.15em -0.1em currentColor,
+      -0.15em 0.1em currentColor;
+  }
+  100% {
+    transform: scale(1);
+    filter: none;
+    text-shadow: none;
+  }
+}
+
+.ghost {
+  position: absolute;
+  left: 50%;
+  top: -1.6rem;
+  transform: translateX(-50%);
+  font-size: 1.15rem;
+  opacity: 0;
+  pointer-events: none;
+  white-space: pre-wrap;
+  animation: ghost-float 2000ms var(--ease) forwards;
+  animation-delay: 260ms;
+}
+
+@keyframes ghost-float {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 0);
+  }
+  20% {
+    opacity: 0.6;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -3.2rem);
+  }
+}
+
+/* Button */
+button {
+  margin-top: 2rem;
+  background: none;
+  border: 1px solid #8be9fd;
+  color: #8be9fd;
+  padding: 0.5rem 1.2rem;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #8be9fd;
+  color: var(--bg);
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .message,
+  .splash {
+    transition: none;
+  }
+
+  .message.explode,
+  .ghost {
+    animation: none;
+  }
+}
