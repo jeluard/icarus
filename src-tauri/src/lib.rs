@@ -26,13 +26,6 @@ fn chain_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
         .join("chain.db")
 }
 
-fn snapshots_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
-    app.path()
-        .app_data_dir()
-        .expect("no app data dir")
-        .join("snapshots")
-}
-
 #[derive(Serialize, Debug, Clone)]
 #[serde(tag = "type", content = "payload")]
 pub enum AppEvent {
@@ -287,7 +280,6 @@ fn launch_amaru(app: AppHandle, network: NetworkName) {
                         network,
                         ledger_dir.clone(),
                         chain_dir.clone(),
-                        snapshots_dir(&app),
                     )
                     .await
                     .unwrap();
