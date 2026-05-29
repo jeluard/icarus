@@ -1,16 +1,13 @@
 use amaru::{
     bootstrap::bootstrap,
-    stages::{build_and_run_network, Config},
+    observability::{ObservabilityHints, TracingSubscriber, setup_open_telemetry},
+    stages::{build_node::build_and_run_node, config::{Config, StoreType}},
 };
-use amaru_kernel::{Epoch, Slot, network::NetworkName};
+use amaru_kernel::NetworkName;
 use amaru_stores::rocksdb::RocksDbConfig;
-use amaru_tracing_json::{JsonLayer, JsonTraceCollector};
-use serde::Serialize;
 use serde_json::json;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_store::StoreExt;
-use tracing::Dispatch;
-use tracing_subscriber::layer::SubscriberExt;
 
 fn ledger_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
     app.path()
@@ -26,161 +23,6 @@ fn chain_dir(app: &tauri::AppHandle) -> std::path::PathBuf {
         .join("chain.db")
 }
 
-#[derive(Serialize, Debug, Clone)]
-#[serde(tag = "type", content = "payload")]
-pub enum AppEvent {
-    #[serde(rename = "bootstrap")]
-    Bootstrap(BootstrapEvent),
-
-    #[serde(rename = "runtime")]
-    Runtime(RuntimeEvent),
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(tag = "kind")]
-pub enum BootstrapEvent {
-    #[serde(rename = "downloading_snapshot")]
-    DownloadingShapshot { epoch: Epoch },
-
-    #[serde(rename = "snapshots_downloaded")]
-    SnapshotsDownloaded {},
-
-    #[serde(rename = "importing_snapshots")]
-    ImportingSnapshots {},
-
-    #[serde(rename = "importing_snapshot")]
-    ImportingSnapshot { snapshot: String },
-
-    #[serde(rename = "imported_snapshot")]
-    ImportedSnapshot { epoch: Epoch },
-
-    #[serde(rename = "imported_snapshots")]
-    ImportedSnapshots {},
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(tag = "kind")]
-pub enum RuntimeEvent {
-    #[serde(rename = "starting")]
-    Starting { tip: Slot },
-
-    #[serde(rename = "creating_state")]
-    CreatingState {},
-
-    #[serde(rename = "epoch_transition")]
-    EpochTransition { from: Epoch, into: Epoch },
-
-    #[serde(rename = "tip_caught_up")]
-    TipCaughtUp { slot: Slot },
-
-    #[serde(rename = "tip_syncing")]
-    TipSyncing { slot: Slot },
-}
-
-fn slot_from_point(line: &serde_json::Value, field: &str) -> Slot {
-    line.get(field)
-        .unwrap_or(&serde_json::Value::Null)
-        .as_str()
-        .and_then(|obj| obj.split(".").next())
-        .and_then(|slot_val| slot_val.parse::<u64>().ok())
-        .unwrap_or_default()
-        .into()
-}
-
-fn emit_logs(app: &tauri::AppHandle, line: serde_json::Value) {
-    let name = line
-        .get("name")
-        .unwrap_or_default()
-        .as_str()
-        .unwrap_or_default();
-    let event = match name {
-        "Downloading snapshot" => {
-            let epoch = line
-                .get("epoch")
-                .unwrap_or_default()
-                .as_str()
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or_default();
-            Some(AppEvent::Bootstrap(BootstrapEvent::DownloadingShapshot {
-                epoch,
-            }))
-        }
-        "All snapshots downloaded and decompressed successfully" => {
-            Some(AppEvent::Bootstrap(BootstrapEvent::SnapshotsDownloaded {}))
-        }
-        "Importing snapshots" => Some(AppEvent::Bootstrap(BootstrapEvent::ImportingSnapshots {})),
-        "Importing snapshot" => {
-            let snapshot = line
-                .get("snapshot")
-                .and_then(|v| v.as_str())
-                .unwrap_or_default()
-                .to_string();
-            Some(AppEvent::Bootstrap(BootstrapEvent::ImportingSnapshot {
-                snapshot,
-            }))
-        }
-        "Imported snapshot" => {
-            let epoch = line
-                .get("epoch")
-                .unwrap_or_default()
-                .as_str()
-                .unwrap_or_default()
-                .parse()
-                .unwrap_or_default();
-            Some(AppEvent::Bootstrap(BootstrapEvent::ImportedSnapshot {
-                epoch,
-            }))
-        }
-        "Imported snapshots" => Some(AppEvent::Bootstrap(BootstrapEvent::ImportedSnapshots {})),
-        "starting" => {
-            // tip":{"hash":"d6fe6439aed8bddc10eec22c1575bf0648e4a76125387d9e985e9a3f8342870d","slot":70070379}
-            let tip = line
-                .get("tip")
-                .unwrap_or_default()
-                .as_object()
-                .unwrap()
-                .get("slot")
-                .unwrap_or_default()
-                .as_u64()
-                .unwrap_or_default()
-                .into();
-            Some(AppEvent::Runtime(RuntimeEvent::Starting { tip }))
-        }
-        "new.known_snapshots" => Some(AppEvent::Runtime(RuntimeEvent::CreatingState {})),
-        "epoch_transition" => {
-            let from = line
-                .get("from")
-                .unwrap_or_default()
-                .as_u64()
-                .unwrap_or_default()
-                .into();
-            let into = line
-                .get("into")
-                .unwrap_or_default()
-                .as_u64()
-                .unwrap_or_default()
-                .into();
-            Some(AppEvent::Runtime(RuntimeEvent::EpochTransition {
-                from,
-                into,
-            }))
-        }
-        "track_peers.caught_up.new_tip" => {
-            let slot = slot_from_point(&line, "point");
-            Some(AppEvent::Runtime(RuntimeEvent::TipCaughtUp { slot }))
-        }
-        "track_peers.syncing.new_tip" => {
-            let slot = slot_from_point(&line, "point");
-            Some(AppEvent::Runtime(RuntimeEvent::TipSyncing { slot }))
-        }
-        _ => None,
-    };
-    let _ = if let Some(event) = event {
-        let _ = app.emit("amaru", event);
-    };
-}
-
 #[tauri::command]
 fn clear_app_data_dir(app: AppHandle) -> Result<(), String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -192,31 +34,8 @@ fn clear_app_data_dir(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-#[tauri::command]
-fn clear_dbs(app: AppHandle) -> Result<(), String> {
-    let ledger_dir = ledger_dir(&app);
-
-    if ledger_dir.exists() {
-        std::fs::remove_dir_all(&ledger_dir).map_err(|e| e.to_string())?;
-    }
-
-    let chain_dir = chain_dir(&app);
-
-    if ledger_dir.exists() {
-        std::fs::remove_dir_all(&chain_dir).map_err(|e| e.to_string())?;
-    }
-
-    Ok(())
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let collector = JsonTraceCollector::default();
-    let layer = JsonLayer::new(collector.clone());
-    let subscriber = tracing_subscriber::registry().with(layer);
-    let dispatch = Dispatch::new(subscriber);
-    let _guard = tracing::dispatcher::set_global_default(dispatch);
-
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::default().build())
         .plugin(tauri_plugin_opener::init())
@@ -228,21 +47,10 @@ pub fn run() {
             let window = app.get_webview_window("main").unwrap();
             window.open_devtools();
 
-            let app_handle = app.handle().clone();
+            let otel_db = app.path().app_data_dir().expect("no app data dir").join("otel.db");
+            otel_ui_backend::spawn(otel_db);
 
-            //      clear_app_data_dir(app_handle.clone()).ok();
-            //      clear_dbs(app_handle.clone()).ok();
-
-            tauri::async_runtime::spawn(async move {
-                launch_amaru(app_handle.clone(), NetworkName::Preprod);
-                loop {
-                    let lines = collector.flush();
-                    for line in lines {
-                        emit_logs(&app_handle, line);
-                    }
-                    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
-                }
-            });
+            launch_amaru(app.handle().clone(), NetworkName::Preprod);
 
             Ok(())
         })
@@ -268,11 +76,24 @@ fn peers_for_network(network: NetworkName) -> Vec<String> {
 }
 
 fn launch_amaru(app: AppHandle, network: NetworkName) {
-    std::thread::Builder::new()
-        .stack_size(8 * 1024 * 1024)
-        .spawn(move || {
-            let rt = tokio::runtime::Runtime::new().unwrap();
-            rt.block_on(async {
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .enable_all()
+            .thread_stack_size(8 * 1024 * 1024)
+            .build()
+            .unwrap();
+        rt.block_on(async {
+                // Set up OpenTelemetry — exports to otel-ui-backend on localhost:4317 (gRPC)
+                struct Hints;
+                impl ObservabilityHints for Hints {
+                    fn listen_address(&self) -> Option<&str> {
+                        None
+                    }
+                }
+                let mut subscriber = TracingSubscriber::new();
+                let (otel_handle, _) = setup_open_telemetry(&mut subscriber, &Hints);
+                subscriber.init(false);
+
                 let ledger_dir = ledger_dir(&app);
                 let chain_dir = chain_dir(&app);
                 if !ledger_dir.exists() {
@@ -280,23 +101,35 @@ fn launch_amaru(app: AppHandle, network: NetworkName) {
                         network,
                         ledger_dir.clone(),
                         chain_dir.clone(),
+                        None,
                     )
                     .await
                     .unwrap();
                 }
                 let config = Config {
                     upstream_peers: peers_for_network(network),
-                    ledger_store: amaru::stages::StoreType::RocksDb(RocksDbConfig::new(ledger_dir)),
-                    chain_store: amaru::stages::StoreType::RocksDb(RocksDbConfig::new(chain_dir)),
+                    ledger_store: RocksDbConfig::new(ledger_dir),
+                    chain_store: StoreType::RocksDb(RocksDbConfig::new(chain_dir)),
                     migrate_chain_db: true,
+                    network,
+                    submit_api_address: Some("127.0.0.1:3001".to_string()),
                     ..Config::default()
                 };
 
-                match build_and_run_network(config, None).await {
-                    Ok(running) => running.join().await,
-                    Err(e) => eprintln!("Bootstrap failed: {}", e),
+                let submit_api_addr = config.submit_api_address().ok().flatten();
+
+                match build_and_run_node(config, otel_handle.metrics) {
+                    Ok(running) => {
+                        let exit = amaru::exit::hook_exit_token();
+                        if let Some(addr) = submit_api_addr {
+                            if let Err(e) = amaru::submit_api::start(addr, running.mempool_sender(), exit.child_token()).await {
+                                eprintln!("Submit API failed to start: {e}");
+                            }
+                        }
+                        running.termination().await
+                    },
+                    Err(e) => eprintln!("Node start failed: {}", e),
                 }
             });
-        })
-        .unwrap();
+    });
 }

@@ -14,10 +14,7 @@ export type BootstrapEvent =
     epoch: number;
   }
   | {
-    kind: "snapshots_downloaded";
-  }
-  | {
-    kind: "importing_snapshots";
+    kind: "downloaded_snapshot";
   }
   | {
     kind: "importing_snapshot";
@@ -25,19 +22,9 @@ export type BootstrapEvent =
   }
   | {
     kind: "imported_snapshot";
-  }
-  | {
-    kind: "imported_snapshots";
   };
 
 export type RuntimeEvent =
-  | {
-    kind: "starting";
-    tip: number;
-  }
-  | {
-    kind: "creating_state";
-  }
   | {
     kind: "epoch_transition";
     from: number;
