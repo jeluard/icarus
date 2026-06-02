@@ -44,8 +44,10 @@ pub fn run() {
             let store = app.store("store.json")?;
             store.set("network", json!({ "value": "PreProd" }));
 
-            let window = app.get_webview_window("main").unwrap();
-            window.open_devtools();
+            #[cfg(debug_assertions)]
+            if let Some(window) = app.get_webview_window("main") {
+                window.open_devtools();
+            }
 
             let otel_db = app.path().app_data_dir().expect("no app data dir").join("otel.db");
             otel_ui_backend::spawn(otel_db);
