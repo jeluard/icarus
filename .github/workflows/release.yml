@@ -16,8 +16,6 @@ jobs:
         include:
           - target: aarch64-apple-darwin
             runner: macos-latest
-          - target: x86_64-apple-darwin
-            runner: macos-13
 
     steps:
       - uses: actions/checkout@v4
@@ -28,14 +26,15 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Update Rust toolchain
+      - name: Set up Rust
         run: |
-          rustup update stable
-          rustup default stable
-          rustc --version
+          TOOLCHAIN="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+          rustup default "$TOOLCHAIN"
+          rustup target add ${{ matrix.target }} --toolchain "$TOOLCHAIN"
 
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.target }}
+      - name: Show Rust version
+        run: rustc --version
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
