@@ -1,8 +1,12 @@
 BUILD_PROFILE ?= release
 
 VERSION ?= $(shell node -p "require('./package.json').version")
-BUMP ?= minor
-NEXT_VERSION ?= $(shell node -e 'const [maj,min,pat]=require("./package.json").version.split(".").map(Number); const bump="$(BUMP)" || "minor"; if (bump === "major") console.log(`$${maj+1}.0.0`); else if (bump === "patch") console.log(`$${maj}.$${min}.$${pat+1}`); else console.log(`$${maj}.$${min+1}.0`);')
+BUMP ?= patch
+BASE_VERSION ?= $(shell node -e 'const fs=require("fs"); const cp=require("child_process"); const semver=/^(\d+)\.(\d+)\.(\d+)$$/; const versions=[]; const add=(v)=>{ if(typeof v!=="string") return; const m=v.trim().match(semver); if(m) versions.push([Number(m[1]),Number(m[2]),Number(m[3])]); }; try { add(JSON.parse(fs.readFileSync("./package.json","utf8")).version); } catch(_) {} try { add(JSON.parse(fs.readFileSync("./src-tauri/tauri.conf.json","utf8")).version); } catch(_) {} try { const cargo=fs.readFileSync("./src-tauri/Cargo.toml","utf8"); const m=cargo.match(/^version\s*=\s*"(\d+\.\d+\.\d+)"/m); if(m) add(m[1]); } catch(_) {} try { const tags=cp.execSync("git tag --list 'v*.*.*'", {stdio:["ignore","pipe","ignore"]}).toString().trim().split(/\n+/).filter(Boolean); for(const t of tags) add(t.replace(/^v/,"")); } catch(_) {} try { const remote=cp.execSync("git ls-remote --tags --refs origin", {stdio:["ignore","pipe","ignore"]}).toString().trim().split(/\n+/).filter(Boolean); for(const line of remote){ const parts=line.split(/\s+/); const ref=parts[1]||""; const m=ref.match(/^refs\/tags\/v(\d+\.\d+\.\d+)$$/); if(m) add(m[1]); } } catch(_) {} if(!versions.length){ console.log("0.1.0"); process.exit(0);} versions.sort((a,b)=>a[0]-b[0] || a[1]-b[1] || a[2]-b[2]); const v=versions[versions.length-1]; console.log(v[0]+"."+v[1]+"."+v[2]);')
+NEXT_VERSION ?= $(shell node -e 'const m="$(BASE_VERSION)".trim().match(/^(\d+)\.(\d+)\.(\d+)$$/); const maj=m?Number(m[1]):0; const min=m?Number(m[2]):1; const pat=m?Number(m[3]):0; const bump="$(BUMP)" || "minor"; if (bump === "major") console.log((maj+1)+".0.0"); else if (bump === "patch") console.log(maj+"."+min+"."+(pat+1)); else console.log(maj+"."+(min+1)+".0");')
+NEXT_PATCH_VERSION ?= $(shell node -e 'const m="$(BASE_VERSION)".trim().match(/^(\d+)\.(\d+)\.(\d+)$$/); const maj=m?Number(m[1]):0; const min=m?Number(m[2]):1; const pat=m?Number(m[3]):0; console.log(maj+"."+min+"."+(pat+1));')
+NEXT_MINOR_VERSION ?= $(shell node -e 'const m="$(BASE_VERSION)".trim().match(/^(\d+)\.(\d+)\.(\d+)$$/); const maj=m?Number(m[1]):0; const min=m?Number(m[2]):1; console.log(maj+"."+(min+1)+".0");')
+NEXT_MAJOR_VERSION ?= $(shell node -e 'const m="$(BASE_VERSION)".trim().match(/^(\d+)\.(\d+)\.(\d+)$$/); const maj=m?Number(m[1]):0; console.log((maj+1)+".0.0");')
 VERSION_TO_TAG := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(NEXT_VERSION))
 CONFIRM ?= no
 
@@ -48,11 +52,41 @@ check: ## &test Run clippy lints
 update-amaru: ## &build Update amaru git dependencies to latest commits
 	cargo update --manifest-path src-tauri/Cargo.toml amaru amaru-kernel amaru-stores amaru-tracing-json
 
-create-release: ## &build Propose release version (default), tag/push with CONFIRM=yes. Supports BUMP=major|minor|patch or VERSION=x.y.z
+create-release: ## &build Propose incremented version; release requires agreed VERSION=x.y.z plus CONFIRM=yes
 	@echo "Proposed release tag: v$(VERSION_TO_TAG)"
 	@if [ "$(CONFIRM)" != "yes" ]; then \
-		echo "No tag created. Re-run with CONFIRM=yes to create and push v$(VERSION_TO_TAG)."; \
+		echo "No tag created. Agree on a version, then run: make create-release VERSION=$(VERSION_TO_TAG) CONFIRM=yes"; \
 	else \
-		git -c tag.gpgSign=false tag --no-sign v$(VERSION_TO_TAG); \
-		git push origin v$(VERSION_TO_TAG); \
+		if [ "$(origin VERSION)" != "command line" ]; then \
+			echo "Select agreed increment from base v$(BASE_VERSION):"; \
+			echo "  1) patch -> v$(NEXT_PATCH_VERSION)"; \
+			echo "  2) minor -> v$(NEXT_MINOR_VERSION)"; \
+			echo "  3) major -> v$(NEXT_MAJOR_VERSION)"; \
+			echo "  4) custom semver"; \
+			printf "Choice [1/2/3/4] (default 1): "; \
+			read choice; \
+			case "$$choice" in \
+				1) AGREED_VERSION="$(NEXT_PATCH_VERSION)" ;; \
+				3) AGREED_VERSION="$(NEXT_MAJOR_VERSION)" ;; \
+				4) printf "Enter version (x.y.z): "; read AGREED_VERSION ;; \
+				*) AGREED_VERSION="$(NEXT_PATCH_VERSION)" ;; \
+			esac; \
+			if ! echo "$$AGREED_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$$'; then \
+				echo "Invalid version: $$AGREED_VERSION"; \
+				exit 2; \
+			fi; \
+		else \
+			AGREED_VERSION="$(VERSION)"; \
+		fi; \
+		echo "Agreed release tag: v$$AGREED_VERSION"; \
+		if git rev-parse -q --verify "refs/tags/v$$AGREED_VERSION" >/dev/null; then \
+			echo "Local tag v$$AGREED_VERSION already exists."; \
+		else \
+			git -c tag.gpgSign=false tag --no-sign v$$AGREED_VERSION; \
+		fi; \
+		if git ls-remote --exit-code --tags origin "refs/tags/v$$AGREED_VERSION" >/dev/null 2>&1; then \
+			echo "Remote tag v$$AGREED_VERSION already exists."; \
+		else \
+			git push origin v$$AGREED_VERSION; \
+		fi; \
 	fi

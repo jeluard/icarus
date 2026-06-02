@@ -1,6 +1,7 @@
 name: Release
 
 on:
+  
   push:
     tags:
       - "v*.*.*"
@@ -26,6 +27,12 @@ jobs:
         with:
           node-version: 22
           cache: npm
+
+      - name: Update Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+          rustc --version
 
       - name: Add Rust target
         run: rustup target add ${{ matrix.target }}
