@@ -56,21 +56,8 @@ jobs:
       - name: Build Tauri app
         run: npm run tauri -- build --target ${{ matrix.target }}
 
-      - name: Package macOS app as tar.gz
-        run: |
-          BUNDLE_DIR="src-tauri/target/${{ matrix.target }}/release/bundle/macos"
-          app="$(find "$BUNDLE_DIR" -maxdepth 1 -type d -name '*.app' | head -n 1)"
-          if [ -z "$app" ]; then
-            echo "No .app bundle found in $BUNDLE_DIR"
-            exit 1
-          fi
-          app_name="$(basename "$app")"
-          base_name="${app_name%.app}"
-          tar -C "$BUNDLE_DIR" -czf "$BUNDLE_DIR/$base_name.app.tar.gz" "$app_name"
-
       - name: Upload release artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: |
             src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
-            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.app.tar.gz
