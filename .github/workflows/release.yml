@@ -29,18 +29,15 @@ jobs:
       - name: Set up Rust
         run: |
           TOOLCHAIN="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
-          rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --component rustfmt --component clippy --component rust-src
           rustup default "$TOOLCHAIN"
           rustup target add ${{ matrix.target }} --toolchain "$TOOLCHAIN"
 
       - name: Show Rust version
         run: |
           rustc --version
-          ver="$(rustc --version | awk '{print $2}')"
-          major="$(echo "$ver" | cut -d. -f1)"
-          minor="$(echo "$ver" | cut -d. -f2)"
-          if [ "$major" -lt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -lt 97 ]; }; then
-            echo "rustc $ver is too old; need at least 1.97"
+          if ! rustc --version | grep -q 'nightly'; then
+            echo "rustc must be nightly for amaru (#![feature] dependency)"
             exit 1
           fi
 
