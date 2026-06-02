@@ -34,7 +34,15 @@ jobs:
           rustup target add ${{ matrix.target }} --toolchain "$TOOLCHAIN"
 
       - name: Show Rust version
-        run: rustc --version
+        run: |
+          rustc --version
+          ver="$(rustc --version | awk '{print $2}')"
+          major="$(echo "$ver" | cut -d. -f1)"
+          minor="$(echo "$ver" | cut -d. -f2)"
+          if [ "$major" -lt 1 ] || { [ "$major" -eq 1 ] && [ "$minor" -lt 97 ]; }; then
+            echo "rustc $ver is too old; need at least 1.97"
+            exit 1
+          fi
 
       - name: Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
