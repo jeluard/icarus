@@ -81,7 +81,7 @@ create-release: ## &build Propose incremented version; release requires agreed V
 		else \
 			AGREED_VERSION="$(VERSION)"; \
 		fi; \
-		AGREED_VERSION="$$AGREED_VERSION" node -e 'const fs=require("fs"); const version=process.env.AGREED_VERSION; const writeJson=(path)=>{ const data=JSON.parse(fs.readFileSync(path,"utf8")); data.version=version; fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n"); }; writeJson("package.json"); writeJson("src-tauri/tauri.conf.json"); const cargoPath="src-tauri/Cargo.toml"; const cargo=fs.readFileSync(cargoPath,"utf8").replace(/^version\s*=\s*"[^"]*"/m, `version = "${version}"`); fs.writeFileSync(cargoPath, cargo);' \
+		AGREED_VERSION="$$AGREED_VERSION" node -e 'const fs=require("fs"); const version=process.env.AGREED_VERSION; const writeJson=(path)=>{ const data=JSON.parse(fs.readFileSync(path,"utf8")); data.version=version; fs.writeFileSync(path, JSON.stringify(data, null, 2) + "\n"); }; writeJson("package.json"); writeJson("src-tauri/tauri.conf.json"); const cargoPath="src-tauri/Cargo.toml"; const cargo=fs.readFileSync(cargoPath,"utf8").replace(/^version\s*=\s*"[^"]*"/m, `version = "$${version}"`); fs.writeFileSync(cargoPath, cargo);' \
 			echo "Updated package.json, src-tauri/tauri.conf.json, and src-tauri/Cargo.toml to v$$AGREED_VERSION"; \
 		echo "Agreed release tag: v$$AGREED_VERSION"; \
 			git add package.json src-tauri/tauri.conf.json src-tauri/Cargo.toml; \
