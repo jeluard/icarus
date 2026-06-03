@@ -2853,7 +2853,7 @@ dependencies = [
 
 [[package]]
 name = "icarus"
-version = "0.3.10"
+version = "0.3.12"
 dependencies = [
  "amaru",
  "amaru-kernel",
