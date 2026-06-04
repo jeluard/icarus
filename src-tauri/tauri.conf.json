@@ -39,7 +39,7 @@
     ],
     "macOS": {
       "minimumSystemVersion": "10.13",
-      "signingIdentity": "-"
+      "signingIdentity": "${APPLE_SIGNING_IDENTITY:-}"
     }
   }
 }

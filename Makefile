@@ -32,7 +32,7 @@ dev: init ## &build Start Tauri development server
 	npm run tauri -- dev
 
 build: ## &build Compile for $BUILD_PROFILE
-	npm run tauri -- build
+	APPLE_SIGNING_IDENTITY="${APPLE_SIGNING_IDENTITY:--}" npm run tauri -- build
 
 ios-init: init ## &build Initialize the iOS project
 	npm run tauri -- ios init
