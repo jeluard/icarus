@@ -1,69 +1,94 @@
 # Apple Code Signing Setup
 
-## Overview
+This repo already has the Tauri wiring for macOS release signing in `.github/workflows/release.yml` and `src-tauri/tauri.conf.json`. The missing part is supplying the Apple credentials in GitHub Actions.
 
-This project is configured for GitHub Actions-based Apple code signing. Desktop builds for release are signed automatically when tags are pushed.
+## What This Repo Requires
+
+Keep the setup narrow:
+
+1. A paid Apple Developer account.
+2. A Mac.
+3. A `Developer ID Application` certificate installed in Keychain.
+4. A `.p12` export of that certificate.
+5. Apple notarization credentials.
+
+If `security find-identity -v -p codesigning` only shows `Apple Development`, stop there. That is not enough for the GitHub macOS release flow used here.
 
 ## Local Development
 
-For local builds, the project uses **ad-hoc code signing** (`-` identity) by default, which is sufficient for development and local testing.
+Local builds use ad-hoc signing by default:
 
 ```bash
-make build  # Uses ad-hoc signing if APPLE_SIGNING_IDENTITY not set
-```
-
-## Release Signing (GitHub Actions)
-
-When you push a version tag (e.g., `v0.3.14`), the release workflow builds and signs the app using credentials from GitHub Secrets.
-
-### Required GitHub Secrets
-
-Set these in your repository settings under **Settings > Secrets and variables > Actions**:
-
-| Secret | Description |
-|--------|-------------|
-| `APPLE_SIGNING_IDENTITY` | Certificate common name (e.g., `"Developer ID Application: Company Name (ABC123XYZ)"`) |
-| `APPLE_CERTIFICATE` | Base64-encoded .p12 certificate file |
-| `APPLE_CERTIFICATE_PASSWORD` | Password for the .p12 file |
-| `APPLE_ID` | Apple ID email for notarization |
-| `APPLE_PASSWORD` | App-specific password for `APPLE_ID` |
-| `APPLE_TEAM_ID` | Team ID for notarization (e.g., `ABC123XYZ`) |
-
-### Prepare Your Certificate
-
-```bash
-# Convert .cer to .p12
-openssl pkcs12 -export -in certificate.cer -inkey private_key.key -out certificate.p12 -name "Developer ID Application: Company Name (ABC123XYZ)"
-
-# Encode to base64 for GitHub
-base64 < certificate.p12 | pbcopy
-```
-
-Then paste into `APPLE_CERTIFICATE` secret.
-
-### Notarization Notes
-
-- **Apple ID** and **App Password** enable automatic notarization (optional but recommended for distribution)
-- App-specific passwords can be created at https://appleid.apple.com
-- Without notarization credentials, builds still sign but won't be notarized
-
-## Configuration Files
-
-- **tauri.conf.json**: `signingIdentity` uses `${APPLE_SIGNING_IDENTITY:-}` env var (ad-hoc fallback)
-- **.github/workflows/release.yml**: Passes secrets to build environment
-- **Makefile**: `make build` sets `APPLE_SIGNING_IDENTITY` to `"-"` if not provided
-
-## Testing
-
-To test ad-hoc signing locally:
-
-```bash
-# Build with local ad-hoc signing
 make build
-
-# Mount and verify the DMG
-hdiutil mount src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/*.dmg
-codesign -v /Volumes/Icarus/Icarus.app/Contents/MacOS/icarus
 ```
 
-Should see: `valid on disk` (not `adhoc`)
+That is fine for local testing. It is not the release path.
+
+## Release Path
+
+For GitHub releases, this repo follows the Tauri macOS distribution path:
+
+1. Sign with `Developer ID Application`.
+2. Notarize with Apple ID credentials.
+3. Upload the DMG from GitHub Actions.
+
+The workflow currently expects these GitHub Actions secrets:
+
+| Secret | Source |
+|--------|--------|
+| `APPLE_SIGNING_IDENTITY` | Keychain identity name, for example `Developer ID Application: Name (TEAMID)` |
+| `APPLE_CERTIFICATE` | Base64 of the exported `.p12` |
+| `APPLE_CERTIFICATE_PASSWORD` | Password chosen when exporting the `.p12` |
+| `APPLE_ID` | Apple ID email used for notarization |
+| `APPLE_PASSWORD` | Apple app-specific password |
+| `APPLE_TEAM_ID` | Apple Developer Team ID |
+
+## Simplest Setup
+
+### 1. Create the correct certificate
+
+In the Apple Developer portal, create a `Developer ID Application` certificate from a CSR generated on your Mac. Install the downloaded `.cer` on that same Mac.
+
+After that, this should show the correct identity:
+
+```bash
+security find-identity -v -p codesigning
+```
+
+### 2. Export it as `.p12`
+
+In Keychain Access, open `My Certificates`, find `Developer ID Application: ...`, then export it as a `.p12` file.
+
+The easiest location for this repo is:
+
+```bash
+./certificate.p12
+```
+
+### 3. Create the notarization password
+
+Create an Apple app-specific password at:
+
+https://appleid.apple.com
+
+### 4. Populate GitHub secrets
+
+Run:
+
+```bash
+make apple-secrets
+```
+
+The script in `scripts/setup-gh-apple-secrets.sh` now keeps prompts to the minimum needed for this repo:
+
+- repo: auto-detected from `origin`
+- signing identity: auto-detected from Keychain or the `.p12` when possible
+- team id: derived when possible
+- certificate path: defaults to `./certificate.p12` when present
+- user prompts: only for values the script cannot infer and for the notarization credentials required by this release flow
+
+## Notes
+
+- This repo currently uses Apple ID notarization in GitHub Actions, not the App Store Connect API variant.
+- Tauri supports ad-hoc signing with `-` for local builds, which is what `make build` uses when no Apple identity is set.
+- For an external macOS release signed with `Developer ID Application`, treat notarization as part of the required setup.

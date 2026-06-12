@@ -13,7 +13,7 @@ NEXT_VERSION := $(if $(filter major,$(BUMP)),$(NEXT_MAJOR_VERSION),$(if $(filter
 VERSION_TO_TAG := $(if $(filter command line,$(origin VERSION)),$(VERSION),$(NEXT_VERSION))
 CONFIRM ?= no
 
-.PHONY: help init dev build ios-init ios-dev ios-build test fmt check update-amaru create-release
+.PHONY: help init dev build ios-init ios-dev ios-build test fmt check update-amaru apple-secrets create-release
 
 help:
 	@echo "\033[1;4mBuilding & Running:\033[00m"
@@ -54,6 +54,9 @@ check: ## &test Run clippy lints
 
 update-amaru: ## &build Update amaru git dependencies to latest commits
 	cargo update --manifest-path src-tauri/Cargo.toml amaru amaru-kernel amaru-stores amaru-tracing-json
+
+apple-secrets: ## &build Populate GitHub Actions Apple signing secrets from local defaults and prompts
+	bash scripts/setup-gh-apple-secrets.sh $(if $(CERTIFICATE_PATH),--certificate-path "$(CERTIFICATE_PATH)")
 
 create-release: ## &build Propose incremented version; release requires agreed VERSION=x.y.z plus CONFIRM=yes
 	@echo "Proposed release tag: v$(VERSION_TO_TAG)"
