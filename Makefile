@@ -1,4 +1,5 @@
 BUILD_PROFILE ?= release
+IOS_SIMULATOR ?=
 
 VERSION ?= $(shell node -p "require('./package.json').version")
 BUMP ?= patch
@@ -37,8 +38,8 @@ build: ## &build Compile for $BUILD_PROFILE
 ios-init: init ## &build Initialize the iOS project
 	npm run tauri -- ios init
 
-ios-dev: init ## &build Start Tauri development server on iOS simulator
-	npm run tauri -- ios dev
+ios-dev: init ## &build Start Tauri development server on iOS simulator (set IOS_SIMULATOR to force one)
+	npm run tauri -- ios dev $(if $(strip $(IOS_SIMULATOR)),"$(IOS_SIMULATOR)")
 
 ios-build: init ## &build Compile for iOS
 	npm run tauri -- ios build
@@ -52,8 +53,8 @@ fmt: ## &test Format Rust code
 check: ## &test Run clippy lints
 	cargo clippy --manifest-path src-tauri/Cargo.toml
 
-update-amaru: ## &build Update amaru git dependencies to latest commits
-	cargo update --manifest-path src-tauri/Cargo.toml amaru amaru-kernel amaru-stores amaru-tracing-json
+update-amaru: ## &build Refresh dependencies locked to the configured Amaru branch
+	cargo update --manifest-path src-tauri/Cargo.toml amaru-bootstrap amaru-node
 
 apple-secrets: ## &build Populate GitHub Actions Apple signing secrets from local defaults and prompts
 	bash scripts/setup-gh-apple-secrets.sh $(if $(CERTIFICATE_PATH),--certificate-path "$(CERTIFICATE_PATH)")

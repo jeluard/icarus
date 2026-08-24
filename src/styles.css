@@ -36,6 +36,7 @@ main {
   inset: 0;
   background: var(--bg);
   display: grid;
+  grid-template-rows: 1fr auto;
   place-items: center;
   z-index: 1000;
   transition: opacity 600ms var(--ease);
@@ -49,6 +50,20 @@ main {
 .splash img {
   max-width: 60vmin;
   max-height: 60vmin;
+  align-self: end;
+}
+
+.startup-status {
+  align-self: start;
+  min-height: 1.5rem;
+  margin: 1.5rem 1rem 0;
+  color: #a7acc4;
+  font: 0.9rem/1.5 system-ui, sans-serif;
+  text-align: center;
+}
+
+.startup-status.error {
+  color: #f39aaa;
 }
 
 .badge {
